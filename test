@@ -1,0 +1,242 @@
+import SwiftUI
+
+struct NewsItem: Identifiable, Codable {
+    let id: UUID
+    let title: String
+    let summary: String
+    let sourceURL: URL
+    let timestamp: Date
+    var shareCount: Int
+    let relatedTopics: [String]
+}
+
+class NewsViewModel: ObservableObject {
+    @Published var newsItems: [NewsItem] = []
+    @Published var username: String = "User"
+    @Published var isDarkMode = false
+    
+    // Mock data - replace with actual API calls
+    func fetchTrendingNews() {
+        // In a real app, this would call your news API
+        let mockItems = [
+            NewsItem(
+                id: UUID(),
+                title: "Apple Announces New AI Features at WWDC",
+                summary: "Apple introduced new AI-powered tools for developers including enhanced Siri capabilities and on-device processing.",
+                sourceURL: URL(string: "https://example.com/apple-ai")!,
+                timestamp: Date(),
+                shareCount: 0,
+                relatedTopics: ["Artificial Intelligence", "WWDC", "iOS 18"]
+            ),
+            NewsItem(
+                id: UUID(),
+                title: "Scientists Discover New Renewable Energy Source",
+                summary: "Breakthrough in hydrogen extraction could revolutionize clean energy sector within the next decade.",
+                sourceURL: URL(string: "https://example.com/energy")!,
+                timestamp: Date(),
+                shareCount: 0,
+                relatedTopics: ["Environment", "Technology", "Sustainability"]
+            )
+        ]
+        
+        DispatchQueue.main.async {
+            self.newsItems = mockItems
+        }
+    }
+    
+    func incrementShareCount(for newsItem: NewsItem) {
+        if let index = newsItems.firstIndex(where: { $0.id == newsItem.id }) {
+            newsItems[index].shareCount += 1
+            // In real app, send this to your backend
+            print("Shared count increased for: \(newsItem.title)")
+        }
+    }
+}
+
+struct ContentView: View {
+    @StateObject private var viewModel = NewsViewModel()
+    @State private var selectedTopics: Set<String> = []
+    
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                viewModel.isDarkMode ? Color.black.edgesIgnoringSafeArea(.all) : Color.white.edgesIgnoringSafeArea(.all)
+                
+                VStack(alignment: .leading, spacing: 16) {
+                    // Header
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Hello \(viewModel.username)")
+                            .font(.system(size: 24, weight: .regular))
+                            .foregroundColor(viewModel.isDarkMode ? .white : .black)
+                        
+                        Text("Here's what's up")
+                            .font(.system(size: 16, weight: .light))
+                            .foregroundColor(viewModel.isDarkMode ? .white.opacity(0.7) : .black.opacity(0.7))
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
+                    
+                    // News Feed
+                    ScrollView {
+                        VStack(spacing: 20) {
+                            ForEach(viewModel.newsItems) { item in
+                                NewsCard(item: item, isDarkMode: $viewModel.isDarkMode)
+                                    .contextMenu {
+                                        Button(action: {
+                                            shareNews(item: item)
+                                        }) {
+                                            Label("Tag a friend", systemImage: "person.badge.plus")
+                                        }
+                                    }
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 20)
+                    }
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: {
+                        viewModel.isDarkMode.toggle()
+                    }) {
+                        Image(systemName: viewModel.isDarkMode ? "sun.max.fill" : "moon.fill")
+                            .foregroundColor(viewModel.isDarkMode ? .white : .black)
+                    }
+                }
+            }
+        }
+        .onAppear {
+            viewModel.fetchTrendingNews()
+        }
+    }
+    
+    private func shareNews(item: NewsItem) {
+        viewModel.incrementShareCount(for: item)
+        let activityVC = UIActivityViewController(
+            activityItems: ["Check this out: \(item.title)", item.sourceURL],
+            applicationActivities: nil
+        )
+        
+        UIApplication.shared.windows.first?.rootViewController?.present(activityVC, animated: true)
+    }
+}
+
+struct NewsCard: View {
+    let item: NewsItem
+    @Binding var isDarkMode: Bool
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Headline
+            Text(item.title)
+                .font(.system(size: 18, weight: .bold))
+                .foregroundColor(isDarkMode ? .white : .black)
+                .fixedSize(horizontal: false, vertical: true)
+            
+            // Summary
+            Text(item.summary)
+                .font(.system(size: 14, weight: .regular))
+                .foregroundColor(isDarkMode ? .white.opacity(0.8) : .black.opacity(0.8))
+                .fixedSize(horizontal: false, vertical: true)
+            
+            // Source Link
+            Link("Read full story", destination: item.sourceURL)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.blue)
+                .padding(.top, 4)
+            
+            // Related Topics
+            if !item.relatedTopics.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("You might also like:")
+                        .font(.system(size: 12, weight: .light))
+                        .foregroundColor(isDarkMode ? .white.opacity(0.6) : .black.opacity(0.6))
+                    
+                    FlexibleTopicView(topics: item.relatedTopics, isDarkMode: isDarkMode)
+                }
+                .padding(.top, 8)
+            }
+            
+            // Share Count
+            HStack {
+                Spacer()
+                Text("Tagged \(item.shareCount) times")
+                    .font(.system(size: 10, weight: .light))
+                    .foregroundColor(isDarkMode ? .white.opacity(0.5) : .black.opacity(0.5))
+            }
+        }
+        .padding(16)
+        .background(isDarkMode ? Color.gray.opacity(0.2) : Color.gray.opacity(0.1))
+        .cornerRadius(12)
+    }
+}
+
+struct FlexibleTopicView: View {
+    let topics: [String]
+    let isDarkMode: Bool
+    @State private var totalHeight = CGFloat.zero
+    
+    var body: some View {
+        GeometryReader { geometry in
+            self.generateContent(in: geometry)
+        }
+        .frame(height: totalHeight)
+    }
+    
+    private func generateContent(in g: GeometryProxy) -> some View {
+        var width = CGFloat.zero
+        var height = CGFloat.zero
+        
+        return ZStack(alignment: .topLeading) {
+            ForEach(topics, id: \.self) { topic in
+                Text(topic)
+                    .font(.system(size: 12))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(isDarkMode ? Color.blue.opacity(0.2) : Color.blue.opacity(0.1))
+                    .foregroundColor(isDarkMode ? .white : .blue)
+                    .cornerRadius(12)
+                    .padding(4)
+                    .alignmentGuide(.leading, computeValue: { d in
+                        if (abs(width - d.width) > g.size.width) {
+                            width = 0
+                            height -= d.height
+                        }
+                        let result = width
+                        if topic == topics.last! {
+                            width = 0
+                        } else {
+                            width -= d.width
+                        }
+                        return result
+                    })
+                    .alignmentGuide(.top, computeValue: { d in
+                        let result = height
+                        if topic == topics.last! {
+                            height = 0
+                        }
+                        return result
+                    })
+            }
+        }
+        .background(viewHeightReader($totalHeight))
+    }
+    
+    private func viewHeightReader(_ binding: Binding<CGFloat>) -> some View {
+        return GeometryReader { geometry -> Color in
+            let rect = geometry.frame(in: .local)
+            DispatchQueue.main.async {
+                binding.wrappedValue = rect.size.height
+            }
+            return .clear
+        }
+    }
+}
+
+// Preview
+struct ContentView_Previews: PreviewProvider {
+    static var previews: some View {
+        ContentView()
+    }
+}
